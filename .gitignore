@@ -1,0 +1,24 @@
+# dependências
+node_modules/
+npm-debug.log*
+yarn.lock
+pnpm-lock.yaml
+
+# builds e cache
+.next/
+.turbo/
+dist/
+build/
+
+# IDE / sistema
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ambiente
+.env
+.env.local
+.env.development
+.env.production
+.env.test
