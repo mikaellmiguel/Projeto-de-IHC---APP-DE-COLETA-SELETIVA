@@ -14,6 +14,8 @@ app.get("/test", (req, res) => {
   res.send("The server is running!");
 });
 
+const knex = require("../src/database/index.js");
+
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
