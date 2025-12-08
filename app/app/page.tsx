@@ -1,32 +1,128 @@
 "use client"
 
-import { useState } from "react"
-import { LayoutGrid, Leaf, BookOpen } from "lucide-react"
+import { useState, useEffect } from "react"
+import { LayoutGrid, Leaf, UserIcon, ChevronLeft } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import AuthForm from "@/components/auth-form"
+import GroupsPage from "@/components/groups-page"
 import CollectivePanel from "@/components/collective-panel"
 import ImpactPage from "@/components/impact-page"
-import CollectionGuide from "@/components/collection-guide"
+import ProfilePage from "@/components/profile-page"
 
-type TabType = "collective" | "impact" | "guide"
+type TabType = "collective" | "impact" | "profile"
+
+interface AppUser {
+  name: string
+  email: string
+}
+
+interface Group {
+  id: string
+  name: string
+  code: string
+  role: "admin" | "member"
+}
 
 export default function Home() {
+  const [user, setUser] = useState<AppUser | null>(null)
+  const [selectedGroup, setSelectedGroup] = useState<Group | null>(null)
   const [activeTab, setActiveTab] = useState<TabType>("collective")
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    const storedUser = localStorage.getItem("recyclaUser")
+    if (storedUser) {
+      const parsedUser = JSON.parse(storedUser)
+      setUser(parsedUser)
+
+      const storedGroup = localStorage.getItem(`selectedGroup_${parsedUser.email}`)
+      if (storedGroup) {
+        setSelectedGroup(JSON.parse(storedGroup))
+      }
+    }
+    setIsLoading(false)
+  }, [])
+
+  const handleAuth = (newUser: AppUser) => {
+    setUser(newUser)
+    localStorage.setItem("recyclaUser", JSON.stringify(newUser))
+  }
+
+  const handleSelectGroup = (group: Group) => {
+    setSelectedGroup(group)
+    if (user) {
+      localStorage.setItem(`selectedGroup_${user.email}`, JSON.stringify(group))
+    }
+  }
+
+  const handleLogout = () => {
+    setUser(null)
+    setSelectedGroup(null)
+    localStorage.removeItem("recyclaUser")
+  }
+
+  const handleBackToGroups = () => {
+    setSelectedGroup(null)
+    setActiveTab("collective")
+  }
+
+  if (isLoading) {
+    return (
+      <div className="w-full h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-4xl mb-4">♻️</div>
+          <p className="text-muted-foreground">Carregando...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return <AuthForm onAuth={handleAuth} />
+  }
+
+  if (!selectedGroup) {
+    return (
+      <GroupsPage
+        userName={user.name}
+        userEmail={user.email}
+        onSelectGroup={handleSelectGroup}
+        onLogout={handleLogout}
+      />
+    )
+  }
 
   return (
     <div className="w-full h-screen bg-background flex flex-col">
       {/* Header */}
-      <header className="bg-primary text-primary-foreground p-4 text-center flex-shrink-0">
-        <h1 className="text-2xl font-bold">Recicla+ ♻️</h1>
-        <p className="text-sm opacity-90">Juntos pela sustentabilidade</p>
+      <header className="bg-primary text-primary-foreground p-4 flex-shrink-0">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">Recicla+ ♻️</h1>
+            <p className="text-sm opacity-90">{selectedGroup.name}</p>
+          </div>
+          <Button
+            onClick={handleBackToGroups}
+            variant="ghost"
+            className="text-primary-foreground hover:bg-primary/80"
+            size="sm"
+          >
+            <ChevronLeft className="w-4 h-4 mr-1" />
+            Voltar
+          </Button>
+        </div>
       </header>
 
-      {/* Main Content - removed padding and fixed layout to fill entire space */}
+      {/* Main Content */}
       <main className="flex-1 overflow-y-auto pb-20">
         {activeTab === "collective" && <CollectivePanel />}
         {activeTab === "impact" && <ImpactPage />}
-        {activeTab === "guide" && <CollectionGuide />}
+        {activeTab === "profile" && (
+          <ProfilePage userName={user.name} currentGroup={selectedGroup} onLogout={handleLogout} />
+        )}
       </main>
 
-      {/* Navigation Bar - removed fixed positioning and adjusted for full width */}
+      {/* Navigation Bar */}
       <nav className="bg-primary text-primary-foreground border-t border-primary/20 shadow-lg flex-shrink-0">
         <div className="flex justify-around items-center h-20 w-full">
           <button
@@ -50,14 +146,14 @@ export default function Home() {
             <span className="text-xs font-medium">Impacto</span>
           </button>
           <button
-            onClick={() => setActiveTab("guide")}
+            onClick={() => setActiveTab("profile")}
             className={`flex flex-col items-center justify-center w-full h-full gap-1 transition-all ${
-              activeTab === "guide" ? "bg-primary/90" : "hover:bg-primary/80"
+              activeTab === "profile" ? "bg-primary/90" : "hover:bg-primary/80"
             }`}
-            aria-label="Guia de Coleta"
+            aria-label="Meu Perfil"
           >
-            <BookOpen className="w-6 h-6" />
-            <span className="text-xs font-medium">Guia</span>
+            <UserIcon className="w-6 h-6" />
+            <span className="text-xs font-medium">Perfil</span>
           </button>
         </div>
       </nav>
