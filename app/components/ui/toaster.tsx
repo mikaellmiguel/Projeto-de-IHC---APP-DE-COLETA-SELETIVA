@@ -14,15 +14,17 @@ export function Toaster() {
   const { toasts } = useToast()
 
   return (
-    <ToastProvider>
-      {toasts.map(function ({ id, title, description, action, ...props }) {
+    <ToastProvider swipeDirection="up">
+      {toasts.map(function ({ id, title, description, action, duration, ...props }) {
         return (
-          <Toast key={id} {...props}>
+          <Toast
+            key={id}
+            duration={typeof duration === 'number' ? duration : 4000}
+            {...props}
+          >
             <div className="grid gap-1">
-              {title && <ToastTitle>{title}</ToastTitle>}
-              {description && (
-                <ToastDescription>{description}</ToastDescription>
-              )}
+              <ToastTitle>{title && String(title).trim() ? title : "Erro"}</ToastTitle>
+              <ToastDescription>{description && String(description).trim() ? description : "Ocorreu um erro inesperado."}</ToastDescription>
             </div>
             {action}
             <ToastClose />

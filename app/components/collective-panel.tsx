@@ -1,19 +1,23 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Heart, Trash2, Plus } from "lucide-react"
+import { formatDistanceToNow, parseISO, set } from "date-fns"
+import { ptBR } from "date-fns/locale"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {api} from "@/services/api"
 
 interface RecyclingPost {
   id: number
-  user: string
+  user: string,
+  user_id: number,
   avatar: string
   bags: number
   timestamp: string
   likes: number
-  liked: boolean
+  liked: number
 }
 
 interface RecyclingRecord {
@@ -23,76 +27,150 @@ interface RecyclingRecord {
   sharedToFeed: boolean
 }
 
-export default function CollectivePanel() {
-  const [posts, setPosts] = useState<RecyclingPost[]>([
-    {
-      id: 1,
-      user: "Maria Silva",
-      avatar: "👩",
-      bags: 3,
-      timestamp: "há 2 horas",
-      likes: 12,
-      liked: false,
-    },
-    {
-      id: 2,
-      user: "João Santos",
-      avatar: "👨",
-      bags: 2,
-      timestamp: "há 4 horas",
-      likes: 8,
-      liked: false,
-    },
-    {
-      id: 3,
-      user: "Ana Costa",
-      avatar: "👩‍🦰",
-      bags: 1,
-      timestamp: "há 6 horas",
-      likes: 5,
-      liked: false,
-    },
-  ])
+interface ProfilePageProps {
+  currentGroup: { id: string; name: string; code: string; role: "admin" | "member" } | null,
+  userId: number
+}
+
+export default function CollectivePanel({ currentGroup, userId }: ProfilePageProps) {
+  const [posts, setPosts] = useState<RecyclingPost[]>([])
+  const [totalBags, setTotalBags] = useState(0)
+  const [goal, setGoal] = useState<any>(null)
+
+  useEffect(() => {
+    const fetchFeedPosts = async () => {
+      try {
+        const token = localStorage.getItem("token")
+        if (!token) return
+        // Busca feed
+        const res = await api.get(`/records/feed/${currentGroup?.id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        setPosts(
+          res.data.records.map((r: any) => ({
+            id: r.id,
+            user: r.user_id === userId ? "Você" : r.user_name,
+            user_id: r.user_id,
+            avatar: "👤",
+            bags: r.qtd_bags,
+            timestamp: formatDistanceToNow(new Date(r.created_at), { addSuffix: true, locale: ptBR }),
+            likes: r.likes,
+            liked: r.liked_post_id,
+          }))
+        )
+        setTotalBags(res.data.totalBags)
+      } catch (err) {
+        console.log("Erro ao buscar posts do feed:", err)
+      }
+    }
+
+    const fetchGoal = async () => {
+      try {
+        const token = localStorage.getItem("token")
+        if (!token || !currentGroup) return
+        const now = new Date()
+        const month = now.getMonth() + 1
+        const year = now.getFullYear()
+        const res = await api.get(`/groups/${currentGroup.id}/goals` , {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        // goals pode ser array, filtrar pelo mês/ano atual
+        const found = Array.isArray(res.data) ? res.data.find((g: any) => Number(g.month) === month && Number(g.year) === year) : null
+        setGoal(found)
+      } catch (err) {
+        setGoal(null)
+      }
+    }
+
+    fetchFeedPosts()
+    fetchGoal()
+  }, [currentGroup])
 
   const [showModal, setShowModal] = useState(false)
   const [bagsInput, setBagsInput] = useState("")
   const [shareToFeed, setShareToFeed] = useState(true)
 
-  const toggleLike = (id: number) => {
-    setPosts(
-      posts.map((p) => (p.id === id ? { ...p, liked: !p.liked, likes: p.liked ? p.likes - 1 : p.likes + 1 } : p)),
-    )
+  const toggleLike = async (id: number) => {
+    
+    const liked = posts.find((p) => p.id === id)?.liked ? true: false;
+
+    try {
+      const token = localStorage.getItem("token")
+      if (!token) return
+
+      await api.post(`/records/${liked ? "unlike" : "like"}/${id}`, {}, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
+      if(liked){
+        setPosts(posts.map((p) => p.id === id ? { ...p, likes: Number(p.likes) - 1, liked: 0 } : p))
+      }
+      else{
+        setPosts(posts.map((p) => p.id === id ? { ...p, likes: Number(p.likes) + 1, liked: 1 } : p))
+      }
+
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err.message || "Tente novamente mais tarde."
+      alert("Erro ao curtir/descurtir post: " + msg)
+      return
+    }
+
   }
 
-  const deletePost = (id: number) => {
-    setPosts(posts.filter((p) => p.id !== id))
+  const deletePost = async (id: number) => {
+    try {
+      const token = localStorage.getItem("token")
+      if (!token) return
+      await api.delete(`/records/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
+      setPosts(posts.filter((p) => p.id !== id))
+    } catch (err) {
+      console.log("Erro ao deletar post:", err)
+    }
   }
 
-  const handleRegisterRecycling = () => {
+  const handleRegisterRecycling = async () => {
     const bags = Number.parseInt(bagsInput)
     if (!isNaN(bags) && bags > 0) {
-      if (shareToFeed) {
-        const newPost: RecyclingPost = {
-          id: posts.length + 1,
-          user: "Você",
-          avatar: "🎉",
-          bags,
-          timestamp: "agora",
-          likes: 0,
-          liked: false,
+      
+      try{
+        await api.post(`/records/${currentGroup?.id}`, {
+          qtd_bags: bags,
+          show_feed: shareToFeed,
+        }, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        })
+        
+        if (shareToFeed) {
+          const newPost: RecyclingPost = {
+            id: posts.length + 1,
+            user: "Você",
+            avatar: "🎉",
+            bags,
+            user_id: userId,
+            timestamp: "agora",
+            likes: 0,
+            liked: 0,
+          }
+          setPosts([newPost, ...posts])
         }
-        setPosts([newPost, ...posts])
+        // Aqui você salvaria também no histórico de registros do usuário
+        setBagsInput("")
+        setShareToFeed(true)
+        setShowModal(false)
+        setTotalBags(Number(totalBags) + Number(bags))
+
+      } catch (err: any) {
+        const msg = err?.response?.data?.message || err.message || "Tente novamente mais tarde."
+        alert("Erro ao registrar reciclagem: " + msg)
       }
-      // Aqui você salvaria também no histórico de registros do usuário
-      setBagsInput("")
-      setShareToFeed(true)
-      setShowModal(false)
     }
   }
 
   // Calculate team progress
-  const totalBags = posts.reduce((sum, p) => sum + p.bags, 0)
-  const goalBags = 100
+  const goalBags = goal?.qtd_bags || 100
   const progressPercentage = (totalBags / goalBags) * 100
 
   return (
@@ -129,6 +207,12 @@ export default function CollectivePanel() {
             Faltam <span className="font-bold text-primary">{Math.max(0, goalBags - totalBags)}</span> sacos para
             atingir a meta!
           </p>
+          {goal?.rewards && (
+            <div className="flex items-center justify-center gap-2 mt-2 bg-yellow-50 p-3 rounded-lg">
+              <span className="text-3xl">🏆</span>
+              <span className="text-sm text-yellow-700 font-semibold mt-1"><strong>Recompensa:</strong> {goal.rewards}</span>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -145,13 +229,15 @@ export default function CollectivePanel() {
                   <p className="font-semibold text-foreground">{post.user}</p>
                   <p className="text-xs text-muted-foreground">{post.timestamp}</p>
                 </div>
-                <button
-                  onClick={() => deletePost(post.id)}
-                  className="text-muted-foreground hover:text-red-600 transition-colors"
-                  title="Deletar post"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
+                {(post.user_id === userId) && (
+                  <button
+                    onClick={() => deletePost(post.id)}
+                    className="text-muted-foreground hover:text-red-600 transition-colors"
+                    title="Deletar post"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                )}
               </div>
 
               {/* Post Content */}
@@ -190,7 +276,7 @@ export default function CollectivePanel() {
 
             {/* Input de sacos */}
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Quantos sacos você reciclou?</label>
+              <label className="text-sm font-medium text-foreground">Quantos sacos <strong>(≈ 2kg cada)</strong> você reciclou?</label>
               <Input
                 type="number"
                 placeholder="0"

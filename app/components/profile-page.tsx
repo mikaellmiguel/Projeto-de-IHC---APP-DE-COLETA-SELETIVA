@@ -1,8 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { CheckCircle, XCircle, BookOpen, LinkIcon, Leaf, Droplets, Zap, Package, Trash2, Edit2 } from "lucide-react"
+import {api} from "@/services/api"
 
 interface RecyclingRecord {
   id: number
@@ -22,73 +23,108 @@ interface GuideItem {
 
 interface ProfilePageProps {
   userName: string
-  currentGroup: { name: string; code: string; role: "admin" | "member" } | null
+  currentGroup: { id: string; name: string; code: string; role: "admin" | "member" } | null
   onLogout: () => void
+  handleBackToGroups: () => void
 }
 
-export default function ProfilePage({ userName, currentGroup, onLogout }: ProfilePageProps) {
-  const [records, setRecords] = useState<RecyclingRecord[]>([
-    { id: 1, bags: 3, date: "14/12/2025", sharedToFeed: true },
-    { id: 2, bags: 2, date: "12/12/2025", sharedToFeed: false },
-    { id: 3, bags: 1, date: "10/12/2025", sharedToFeed: true },
-  ])
+export default function ProfilePage({ userName, currentGroup, onLogout, handleBackToGroups }: ProfilePageProps) {
+  const [records, setRecords] = useState<RecyclingRecord[]>([])
 
-  const userBagsRecycled = records.reduce((sum, r) => sum + r.bags, 0)
-  const userEnergySaved = userBagsRecycled * 4
-  const userCo2Avoided = userBagsRecycled * 0.4
-  const userWaterSaved = userBagsRecycled * 25
-  const userRawMaterialSaved = userBagsRecycled * 0.5
+  useEffect(() => {
+    const fetchRecords = async () => {
+      try {
+        const token = localStorage.getItem("token")
+        if (!token) return
+        console.log("Current Group:", currentGroup)
+        const res = await api.get(`/records/${currentGroup?.id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        console.log("Records fetched:", res.data)
+        setRecords(res.data.map((r: any) => ({
+          id: r.id,
+          bags: r.qtd_bags,
+          date: new Date(r.created_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }),
+          sharedToFeed: r.show_feed,
+        })))
+      } catch (err) {
+        setRecords([])
+        console.log("Erro ao buscar registros:", err)
+      }
+    }
+    fetchRecords()
+  }, [currentGroup])
 
-  const deleteRecord = (id: number) => {
-    setRecords(records.filter((r) => r.id !== id))
+  // Fonte para a ponderação dos materias por saco reciclado: https://www.gov.br/mma/pt-br/acesso-a-informacao/acoes-e-programas/programa-projetos-acoes-obras-atividades/agendaambientalurbana/lixao-zero/plano_nacional_de_residuos_solidos-1.pdf
+  // Fonte para os calculos de impacto ambiental: https://www.4menearme.com/tools/recycling-calculator , https://lessismore.org/materials/28-why-recycle
+  // Fonte para os calculos de CO2 evitado: https://www.epa.gov/energy/greenhouse-gas-equivalencies-calculator
+
+  const userBagsRecycled = records.reduce((sum, r) => sum + Number(r.bags), 0)
+
+  const WEIGHT_PER_BAG = 2 // kg de material reciclado por saco
+  const PLASTIC_PER_KG = 0.52
+  const PAPER_PER_KG = 0.32
+  const METAL_PER_KG = 0.07
+  const GLASS_PER_KG = 0.09
+
+
+  const userEnergySaved = Math.round(
+    Number(userBagsRecycled) *
+      WEIGHT_PER_BAG *
+      (PLASTIC_PER_KG * 5.7 + PAPER_PER_KG * 4.2 + METAL_PER_KG * 12 + GLASS_PER_KG * 0.42)
+  ) // em kWh
+
+  const userCo2Avoided = Math.round(
+    Number(userBagsRecycled) *
+      WEIGHT_PER_BAG *
+      (PLASTIC_PER_KG * 1.02 + PAPER_PER_KG * 0.46 + METAL_PER_KG * 5.86 + GLASS_PER_KG * 0.31)
+  ) // em kg de CO2
+
+  const userWaterSaved = Math.round(
+    Number(userBagsRecycled) *
+      WEIGHT_PER_BAG *
+      (PLASTIC_PER_KG * 37 + PAPER_PER_KG * 60 + METAL_PER_KG * 40 + GLASS_PER_KG * 15)
+  ) // em litros
+
+  const userRawMaterialSaved = Math.round(
+    Number(userBagsRecycled) *
+      WEIGHT_PER_BAG *
+      (PLASTIC_PER_KG * 1 + PAPER_PER_KG * 1 + METAL_PER_KG * 1.4 + GLASS_PER_KG * 1.2)
+  ) // em kg
+  
+
+  const  deleteRecord = async (id: number) => {
+    try{
+      await api.delete(`/records/${id}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      })
+      setRecords(records.filter((r) => r.id !== id))
+    } catch (err: any) {
+      const message = err?.response?.data?.message || err.message || "Tente novamente mais tarde."
+      alert("Erro ao deletar registro : " + message)
+    } 
+   
   }
 
-  const guides: GuideItem[] = [
-    {
-      category: "♻️ Plástico",
-      color: "from-yellow-500/10 to-yellow-600/10",
-      canRecycle: ["Garrafas PET", "Potes de alimento", "Sacos de compras", "Tupperware"],
-      cannotRecycle: ["Filme plástico", "Sacolas de lixo", "Isopor", "Plástico sujo de óleo"],
-      tips: "Limpe bem os recipientes antes de descartar e remova os rótulos quando possível.",
-      resources: [
-        { title: "Guia de Plásticos Recicláveis", url: "https://www.example.com" },
-        { title: "Como limpar corretamente", url: "https://www.example.com" },
-      ],
-    },
-    {
-      category: "📰 Papel e Papelão",
-      color: "from-orange-500/10 to-orange-600/10",
-      canRecycle: ["Jornais", "Revistas", "Caixas de papelão", "Papel de escritório"],
-      cannotRecycle: ["Papel úmido", "Papel sanitário", "Papel alumínio", "Papel com graxa"],
-      tips: "Desmonte as caixas para economizar espaço e mantenha secas.",
-      resources: [
-        { title: "Reciclagem de Papel", url: "https://www.example.com" },
-        { title: "Composição do papelão", url: "https://www.example.com" },
-      ],
-    },
-    {
-      category: "🥫 Metal e Alumínio",
-      color: "from-gray-500/10 to-gray-600/10",
-      canRecycle: ["Latas de alumínio", "Latas de aço", "Tampas metálicas", "Tubos de toothpaste"],
-      cannotRecycle: ["Spray em aerossol", "Latas danificadas", "Fitas magnéticas"],
-      tips: "Lave as latas e remova os rótulos. Amasse para economizar espaço.",
-      resources: [
-        { title: "Alumínio vs Aço", url: "https://www.example.com" },
-        { title: "Processo de reciclagem", url: "https://www.example.com" },
-      ],
-    },
-    {
-      category: "🥃 Vidro",
-      color: "from-green-500/10 to-green-600/10",
-      canRecycle: ["Garrafas", "Potes de conserva", "Frascos de remédio", "Vidro transparente"],
-      cannotRecycle: ["Vidro espelhado", "Vidro temperado", "Cerâmica", "Vidro fosco"],
-      tips: "Lave bem para remover resíduos de alimento. Coloque em sacos separados.",
-      resources: [
-        { title: "Tipos de vidro", url: "https://www.example.com" },
-        { title: "Segurança na reciclagem", url: "https://www.example.com" },
-      ],
-    },
-  ]
+  const handleLeaveGroup = async () => {
+    
+    try {
+      if (!currentGroup) return
+      const confirmLeave = window.confirm(`Tem certeza que deseja sair do grupo "${currentGroup.name}"?`)
+      if (!confirmLeave) return
+
+      await api.post(`/groups/leave/${currentGroup.id}`, {}, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      })
+      alert("Você saiu do grupo com sucesso.")
+      handleBackToGroups()
+    }
+    catch (err: any) {
+      const message = err?.response?.data?.message || err.message || "Tente novamente mais tarde."
+      alert("Erro ao sair do grupo: " + message)
+    }
+  }
+
 
   return (
     <div className="p-4 max-w-2xl mx-auto space-y-6">
@@ -218,9 +254,6 @@ export default function ProfilePage({ userName, currentGroup, onLogout }: Profil
                       <p className="text-xs text-muted-foreground">{record.date}</p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button className="text-muted-foreground hover:text-primary transition-colors">
-                        <Edit2 className="w-4 h-4" />
-                      </button>
                       <button
                         onClick={() => deleteRecord(record.id)}
                         className="text-muted-foreground hover:text-red-600 transition-colors"
@@ -239,85 +272,14 @@ export default function ProfilePage({ userName, currentGroup, onLogout }: Profil
       {/* Divider */}
       <div className="border-t border-muted pt-4" />
 
-      {/* Collection Guide Section */}
-      <div className="space-y-4">
-        <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
-          <BookOpen className="w-6 h-6 text-primary" />
-          Guia de Coleta
-        </h2>
-
-        {guides.map((guide, idx) => (
-          <Card key={idx} className={`bg-gradient-to-br ${guide.color} border-primary/10`}>
-            <CardHeader>
-              <CardTitle className="text-lg">{guide.category}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <h4 className="flex items-center gap-2 font-semibold text-green-700 mb-2">
-                  <CheckCircle className="w-5 h-5" />
-                  Pode reciclar
-                </h4>
-                <ul className="space-y-1 ml-7">
-                  {guide.canRecycle.map((item, i) => (
-                    <li key={i} className="text-sm text-foreground">
-                      • {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div>
-                <h4 className="flex items-center gap-2 font-semibold text-red-600 mb-2">
-                  <XCircle className="w-5 h-5" />
-                  Não pode reciclar
-                </h4>
-                <ul className="space-y-1 ml-7">
-                  {guide.cannotRecycle.map((item, i) => (
-                    <li key={i} className="text-sm text-muted-foreground">
-                      • {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="bg-background/50 p-3 rounded-lg border border-primary/10">
-                <p className="text-sm">
-                  <span className="font-semibold text-primary">💡 Dica: </span>
-                  {guide.tips}
-                </p>
-              </div>
-
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground mb-2">SAIBA MAIS:</p>
-                <div className="space-y-1">
-                  {guide.resources.map((resource, i) => (
-                    <a
-                      key={i}
-                      href={resource.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 text-sm text-primary hover:text-primary/80 transition-colors"
-                    >
-                      <LinkIcon className="w-4 h-4" />
-                      {resource.title}
-                    </a>
-                  ))}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
       <div className="pt-6 pb-32 border-t border-muted mt-8">
         <button
           onClick={() => {
-            onLogout()
-            window.location.reload()
+            handleLeaveGroup()
           }}
           className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors"
         >
-          Sair
+          Sair do Grupo
         </button>
       </div>
     </div>
