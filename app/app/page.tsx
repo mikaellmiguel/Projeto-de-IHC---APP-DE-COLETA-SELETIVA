@@ -1,19 +1,22 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { LayoutGrid, Leaf, UserIcon, ChevronLeft } from "lucide-react"
+import { LayoutGrid, Leaf, UserIcon, ChevronLeft, BookOpen, Shield } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import AuthForm from "@/components/auth-form"
 import GroupsPage from "@/components/groups-page"
 import CollectivePanel from "@/components/collective-panel"
 import ImpactPage from "@/components/impact-page"
 import ProfilePage from "@/components/profile-page"
+import CollectionGuide from "@/components/collection-guide"
+import AdminPanel from "@/components/admin-panel"
 
-type TabType = "collective" | "impact" | "profile"
+type TabType = "collective" | "impact" | "profile" | "guide" | "admin"
 
 interface AppUser {
   name: string
   email: string
+  id: number
 }
 
 interface Group {
@@ -59,6 +62,7 @@ export default function Home() {
     setUser(null)
     setSelectedGroup(null)
     localStorage.removeItem("recyclaUser")
+    localStorage.removeItem("token")
   }
 
   const handleBackToGroups = () => {
@@ -115,11 +119,13 @@ export default function Home() {
 
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto pb-20">
-        {activeTab === "collective" && <CollectivePanel />}
-        {activeTab === "impact" && <ImpactPage />}
+        {activeTab === "collective" && <CollectivePanel currentGroup={selectedGroup} userId={user.id} />}
+        {activeTab === "impact" && <ImpactPage currentGroup={selectedGroup} />}
         {activeTab === "profile" && (
-          <ProfilePage userName={user.name} currentGroup={selectedGroup} onLogout={handleLogout} />
+          <ProfilePage userName={user.name} currentGroup={selectedGroup} onLogout={handleLogout} handleBackToGroups={handleBackToGroups} />
         )}
+        {activeTab === "guide" && <CollectionGuide />}
+        {activeTab === "admin" && selectedGroup?.role === "admin" && <AdminPanel currentGroup={selectedGroup} />}
       </main>
 
       {/* Navigation Bar */}
@@ -146,6 +152,16 @@ export default function Home() {
             <span className="text-xs font-medium">Impacto</span>
           </button>
           <button
+            onClick={() => setActiveTab("guide")}
+            className={`flex flex-col items-center justify-center w-full h-full gap-1 transition-all ${
+              activeTab === "guide" ? "bg-primary/90" : "hover:bg-primary/80"
+            }`}
+            aria-label="Guia de Coleta"
+          >
+            <BookOpen className="w-6 h-6" />
+            <span className="text-xs font-medium">Guia</span>
+          </button>
+          <button
             onClick={() => setActiveTab("profile")}
             className={`flex flex-col items-center justify-center w-full h-full gap-1 transition-all ${
               activeTab === "profile" ? "bg-primary/90" : "hover:bg-primary/80"
@@ -155,6 +171,18 @@ export default function Home() {
             <UserIcon className="w-6 h-6" />
             <span className="text-xs font-medium">Perfil</span>
           </button>
+          {selectedGroup?.role === "admin" && (
+            <button
+              onClick={() => setActiveTab("admin")}
+              className={`flex flex-col items-center justify-center w-full h-full gap-1 transition-all ${
+                activeTab === "admin" ? "bg-primary/90" : "hover:bg-primary/80"
+              }`}
+              aria-label="Painel Admin"
+            >
+              <Shield className="w-6 h-6" />
+              <span className="text-xs font-medium">Admin</span>
+            </button>
+          )}
         </div>
       </nav>
     </div>

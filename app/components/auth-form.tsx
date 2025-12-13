@@ -3,13 +3,14 @@
 import type React from "react"
 
 import { useState } from "react"
+import {api} from "@/services/api"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Leaf } from "lucide-react"
 
 interface AuthFormProps {
-  onAuth: (user: { name: string; email: string }) => void
+  onAuth: (user: { name: string; email: string, id: number }) => void
 }
 
 export default function AuthForm({ onAuth }: AuthFormProps) {
@@ -17,15 +18,59 @@ export default function AuthForm({ onAuth }: AuthFormProps) {
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (isLogin) {
-      onAuth({ name: "Usuário", email })
-    } else {
-      if (name && email && password) {
-        onAuth({ name, email })
+    setError(null)
+    setLoading(true)
+
+    try {
+      if (isLogin) {
+        const res = await api.post("/sessions", {
+          email,
+          password,
+        })
+
+        const { token, user } = res.data
+        if (token) {
+          localStorage.setItem("token", token)
+        }
+        console.log("Logged in user:", user)
+        onAuth({ name: user?.name ?? "Usuário", email: user?.email ?? email, id: user?.id ?? 0 })
+      } else {
+        // Register: POST /users then login
+        if (!name || !email || !password) {
+          setError("Preencha todos os campos")
+          return
+        }
+
+        await api.post("/users", {
+          name,
+          email,
+          password,
+        })
+
+        // Após cadastro, fazer login automático
+        const res = await api.post("/sessions", {
+          email,
+          password,
+        })
+
+        const { token, user } = res.data
+        if (token) {
+          localStorage.setItem("token", token)
+        }
+
+        onAuth({ name: user?.name ?? name, email, id: user?.id ?? 0 })
       }
+    } catch (err: any) {
+      console.error(err)
+      const message = err?.response?.data?.message || err.message || "Erro na autenticação"
+      setError(message)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -50,16 +95,25 @@ export default function AuthForm({ onAuth }: AuthFormProps) {
                 required={!isLogin}
               />
             )}
-            <Input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            <Input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              autoComplete={isLogin ? "username" : "new-email"}
+            />
             <Input
               type="password"
               placeholder="Senha"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              autoComplete={isLogin ? "current-password" : "new-password"}
             />
-            <Button type="submit" className="w-full bg-primary hover:bg-primary/90">
-              {isLogin ? "Entrar" : "Cadastrar"}
+            {error && <p className="text-sm text-red-500">{error}</p>}
+            <Button type="submit" className="w-full bg-primary hover:bg-primary/90" disabled={loading}>
+              {loading ? "Carregando..." : isLogin ? "Entrar" : "Cadastrar"}
             </Button>
           </form>
 

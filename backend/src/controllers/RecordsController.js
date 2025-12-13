@@ -39,6 +39,7 @@ class RecordsController {
 
     async getFeedRecords(request, response) {
         const group_id = request.params.id;
+        const user_id = request.user;
         let { limit, offset } = request.query;
 
         limit = limit ? parseInt(limit) : 10;
@@ -58,12 +59,29 @@ class RecordsController {
         }
 
         const records = await knex("records")
-            .where({ group_id })
-            .andWhere('show_feed', true)
-            .limit(limit).offset(offset)
-            .select("*");
+        .join("users", "records.user_id", "users.id")
+        .leftJoin("liked_posts", function () {
+            this.on("liked_posts.record_id", "records.id")
+                .andOnVal("liked_posts.user_id", user_id)
+        })
+        .where({ "records.group_id": group_id })
+        .andWhere("records.show_feed", true)
+        .select(
+            "records.*",
+            "users.id as user_id",
+            "users.name as user_name",
+            "liked_posts.id as liked_post_id"
+        )
+        .orderBy("records.created_at", "desc")
+        .limit(limit)
+        .offset(offset);
         
-        return response.json(records);
+        const totalBags = await knex("records")
+            .where({ group_id })
+            .sum('qtd_bags as total')
+            .first();
+            
+        return response.json({records: records, totalBags: totalBags.total });
     }
 
     async getUserRecords(request, response) {
@@ -84,7 +102,7 @@ class RecordsController {
             .where({ user_id })
             .andWhere({ group_id })
             .limit(limit).offset(offset)
-            .select("*");
+            .select("*").orderBy("created_at", "desc");
 
         return response.json(records);
     }
@@ -120,6 +138,94 @@ class RecordsController {
         await knex("records").where({id: record_id}).delete();
 
         return response.status(200).json();
+    }
+
+    async addLike(request, response) {
+        const record_id = request.params.id;
+        const user_id = request.user;
+        const record = await knex("records").where({id: record_id}).first();
+
+        if (!record) {
+            throw new AppError("Registro não encontrado");
+        }
+
+        const existingLike = await knex("liked_posts")
+            .where({ record_id, user_id })
+            .first();
+        if (existingLike) {
+            throw new AppError("Você já curtiu este registro");
+        }
+
+        await knex("liked_posts").insert({ record_id, user_id });
+        await knex("records")
+            .where({ id: record_id })
+            .increment("likes", 1);
+
+        return response.status(201).json();
+    }
+
+    async removeLike(request, response) {
+        const record_id = request.params.id;
+        const user_id = request.user;
+        const record = await knex("records").where({id: record_id}).first();
+
+        if (!record) {
+            throw new AppError("Registro não encontrado");
+        }
+
+        const existingLike = await knex("liked_posts")
+            .where({ record_id, user_id })
+            .first();
+        if (!existingLike) {
+            throw new AppError("Você não curtiu este registro");
+        }
+        await knex("liked_posts")
+            .where({ record_id, user_id })
+            .delete();
+        await knex("records")
+            .where({ id: record_id })
+            .decrement("likes", 1);
+
+        return response.status(200).json();
+    }
+
+    async record_impact(request, response) {
+        const user_id = request.user;
+        const group_id = request.params.id;
+        const month = request.params.month ? parseInt(request.params.month) : null;
+        const year = request.params.year ? parseInt(request.params.year) : null;
+    
+        const membership = await knex("group_members")
+            .where({ user_id })
+            .first();
+        if (!membership) {
+            throw new AppError("Ação permitida apenas para membros de grupos", 403);
+        }
+
+        const startDate = new Date(year, month - 1, 1);
+        const endDate = new Date(year, month, 0, 23, 59, 59, 999); // Último dia do mês
+
+        const totalBags = await knex("records")
+            .where({ group_id }).whereBetween('created_at', [startDate, endDate])
+            .sum('qtd_bags as total')
+            .first();
+
+        const result = await knex("records")
+            .where("group_id", group_id)
+            .whereBetween("created_at", [startDate, endDate])
+            .select(
+                knex.raw(`
+                CEIL(EXTRACT(DAY FROM created_at) / 7.0) AS week
+                `)
+            )
+            .sum("records.qtd_bags as qtd_bags")
+            .groupBy("week")
+            .orderBy("week");
+        
+        return response.json({
+            totalBags: totalBags.total || 0,
+            weeklyData: result
+        });
     }
 }
 

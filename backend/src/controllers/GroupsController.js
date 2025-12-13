@@ -77,6 +77,17 @@ class GroupsController {
         return response.status(200).json();
     }
 
+    async list(request, response) {
+        const user_id = request.user;
+
+        const groups = await knex("group_members as gm")
+            .join("groups as g", "gm.group_id", "g.id")
+            .select("g.id", "g.name", "g.code", "gm.is_admin", "g.created_at")
+            .where("gm.user_id", user_id);
+        
+        return response.status(200).json(groups);
+    }
+
     async join(request, response) {
 
         const user_id = request.user;
@@ -161,6 +172,8 @@ class GroupsController {
         const group_id = request.params.id;
         const { user_id: admin_id } = request.body;
 
+        console.log("Removing admin:", admin_id, "from group:", group_id);
+
         const group = await knex("groups").where({id: group_id}).first();
 
         if (!group) {
@@ -177,6 +190,15 @@ class GroupsController {
         
         if (!membership || !membership.is_admin) {
             throw new AppError("O usuário não é administrador do grupo");
+        }
+
+        const qtdAdmins = await knex("group_members")
+            .where({ group_id, is_admin: true })
+            .count("user_id as count")
+            .first();
+        
+        if (qtdAdmins.count <= 1) {
+            throw new AppError("O grupo deve ter ao menos um administrador");
         }
 
         await knex("group_members")
@@ -204,12 +226,52 @@ class GroupsController {
             throw new AppError("Ação permitida apenas para membros do grupo", 403);
         }
 
+        // Consulta única: membros + soma de qtd_bags, ordenado do maior para o menor
         const members = await knex("group_members as gm")
             .join("users as u", "gm.user_id", "u.id")
-            .select("u.id", "u.name", "u.email", "gm.is_admin")
-            .where("gm.group_id", group_id);
-        
+            .leftJoin("records as r", "u.id", "r.user_id")
+            .where("gm.group_id", group_id)
+            .groupBy("u.id", "u.name", "u.email", "gm.is_admin")
+            .select(
+                "u.id",
+                "u.name",
+                "u.email",
+                "gm.is_admin",
+                knex.raw("COALESCE(SUM(r.qtd_bags),0) as qtd_bags")
+            )
+            .orderBy([{ column: "qtd_bags", order: "desc" }]);
+
         return response.status(200).json(members);
+    }
+
+    async removeMember(request, response) {
+
+        const user_id = request.user;
+        const group_id = request.params.id;
+        const { user_id: member_id } = request.body;
+        const is_admin = await checkAdmin(user_id, group_id);
+
+        if (!is_admin) {
+            throw new AppError("Ação permitida apenas para administradores do grupo", 403);
+        }
+
+        if (member_id === user_id) {
+            throw new AppError("Administradores não podem remover a si mesmos", 403);
+        }
+
+        const membership = await knex("group_members")
+            .where({ user_id: member_id, group_id })
+            .first();
+
+        if (!membership) {
+            throw new AppError("O usuário não é membro do grupo");
+        }
+
+        await knex("group_members")
+            .where({ user_id: member_id, group_id })
+            .delete();
+        
+        return response.status(200).json();
     }
 }
 

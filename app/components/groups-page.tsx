@@ -1,6 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useToast } from "@/hooks/use-toast"
+import { api } from "@/services/api"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,6 +12,7 @@ interface Group {
   id: string
   name: string
   code: string
+  is_admin: boolean
   role: "admin" | "member"
 }
 
@@ -21,6 +24,7 @@ interface GroupsPageProps {
 }
 
 export default function GroupsPage({ userName, userEmail, onSelectGroup, onLogout }: GroupsPageProps) {
+  const { toast } = useToast()
   const [groups, setGroups] = useState<Group[]>([])
   const [showModal, setShowModal] = useState(false)
   const [modalMode, setModalMode] = useState<"create" | "join">("create")
@@ -28,58 +32,92 @@ export default function GroupsPage({ userName, userEmail, onSelectGroup, onLogou
   const [groupCode, setGroupCode] = useState("")
 
   useEffect(() => {
-    const storedGroups = localStorage.getItem(`groups_${userEmail}`)
-    if (storedGroups) {
-      setGroups(JSON.parse(storedGroups))
+    const fetchGroups = async () => {
+      try {
+        const token = localStorage.getItem("token")
+        if (!token) return
+        const res = await api.get("/groups", {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        // O backend retorna: [{ id, name, code, is_admin, created_at }]
+        setGroups(
+          res.data.map((g: any) => ({
+            id: g.id,
+            name: g.name,
+            code: g.code,
+            is_admin: g.is_admin,
+            role: g.is_admin ? "admin" : "member",
+          }))
+        )
+      } catch (err) {
+        setGroups([])
+      }
     }
+    fetchGroups()
   }, [userEmail])
 
-  const generateGroupCode = () => {
-    return Math.random().toString(36).substring(2, 8).toUpperCase()
-  }
 
-  const handleCreateGroup = () => {
+
+  const handleCreateGroup = async () => {
     if (!groupName.trim()) return
-
-    const newGroup: Group = {
-      id: Date.now().toString(),
-      name: groupName,
-      code: generateGroupCode(),
-      role: "admin",
+    try {
+      const token = localStorage.getItem("token")
+      if (!token) return
+      await api.post(
+        "/groups",
+        { name: groupName },
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      setGroupName("")
+      setShowModal(false)
+      // Atualiza lista após criar
+      const res = await api.get("/groups", {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      setGroups(
+        res.data.map((g: any) => ({
+          id: g.id,
+          name: g.name,
+          code: g.code,
+          is_admin: g.is_admin,
+          role: g.is_admin ? "admin" : "member",
+        }))
+      )
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || "Tente novamente mais tarde."
+      alert("Erro ao criar grupo: " + msg)
     }
-
-    const updatedGroups = [...groups, newGroup]
-    setGroups(updatedGroups)
-    localStorage.setItem(`groups_${userEmail}`, JSON.stringify(updatedGroups))
-
-    setGroupName("")
-    setShowModal(false)
   }
 
-  const handleJoinGroup = () => {
+  const handleJoinGroup = async () => {
     if (!groupCode.trim()) return
-
-    // Verificar se um grupo com este código já existe
-    const existingGroup = groups.find((g) => g.code === groupCode.toUpperCase())
-    if (existingGroup) {
-      alert("Você já está neste grupo!")
-      return
+    try {
+      const token = localStorage.getItem("token")
+      if (!token) return
+      await api.post(
+        `/groups/join/${groupCode.toUpperCase()}`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      setGroupCode("")
+      setShowModal(false)
+      // Atualiza lista após entrar
+      const res = await api.get("/groups", {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      setGroups(
+        res.data.map((g: any) => ({
+          id: g.id,
+          name: g.name,
+          code: g.code,
+          is_admin: g.is_admin,
+          role: g.is_admin ? "admin" : "member",
+        }))
+      )
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || "Tente novamente mais tarde."
+      alert("Erro ao entrar no grupo: " + msg)
     }
-
-    // Simular busca do grupo pelo código (em produção seria uma API)
-    const newGroup: Group = {
-      id: Date.now().toString(),
-      name: `Grupo ${groupCode.toUpperCase()}`,
-      code: groupCode.toUpperCase(),
-      role: "member",
-    }
-
-    const updatedGroups = [...groups, newGroup]
-    setGroups(updatedGroups)
-    localStorage.setItem(`groups_${userEmail}`, JSON.stringify(updatedGroups))
-
-    setGroupCode("")
-    setShowModal(false)
   }
 
   return (
@@ -130,7 +168,7 @@ export default function GroupsPage({ userName, userEmail, onSelectGroup, onLogou
                         </span>
                         <span className="text-xs text-muted-foreground flex items-center gap-1">
                           <Lock className="w-3 h-3" />
-                          {group.code}
+                          {group.role === "admin" ? group.code : ""}
                         </span>
                       </div>
                     </div>

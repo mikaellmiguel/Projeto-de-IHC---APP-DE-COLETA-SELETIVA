@@ -36,7 +36,7 @@ class SessionsController {
         return response.json({
             token,
             expiresAt,
-            user: { name: user.name, email: user.email }
+            user: { name: user.name, email: user.email, id: user.id }
         });
     }
 }
