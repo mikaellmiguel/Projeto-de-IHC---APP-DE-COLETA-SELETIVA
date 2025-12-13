@@ -280,12 +280,12 @@ export default function AdminPanel({ currentGroup }: AdminPanelProps) {
                                 <div className="flex gap-2">
                                     {!member.is_admin && (
                                         <Button size="sm" variant="outline" onClick={() => handleAddAdmin(member.id)}>
-                                            Tornar admin
+                                            <Shield className="w-4 h-4 text-gray-400 group-hover:text-yellow-500 transition-colors" />
                                         </Button>
                                     )}
                                     {member.is_admin && (
                                         <Button size="sm" variant="outline" onClick={() => handleRemoveAdmin(member.id)}>
-                                            Remover admin
+                                            <Shield className="w-4 h-4 text-green-500 group-hover:text-gray-400 transition-colors" />
                                         </Button>
                                     )}
                                     <Button size="sm" variant="destructive" onClick={() => handleRemoveMember(member.id)}>
