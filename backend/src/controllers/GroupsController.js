@@ -237,7 +237,7 @@ class GroupsController {
                 "u.name",
                 "u.email",
                 "gm.is_admin",
-                knex.raw("COALESCE(SUM(r.qtd_bags),0) as qtd_bags")
+                knex.raw("COALESCE(SUM(CASE WHEN r.group_id = ? THEN r.qtd_bags ELSE 0 END),0) as qtd_bags", [group_id])
             )
             .orderBy([{ column: "qtd_bags", order: "desc" }]);
 
