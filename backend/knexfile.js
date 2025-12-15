@@ -5,8 +5,10 @@ module.exports = {
     client: 'pg',
     connection: process.env.SUPABASE_URL,
     pool: {
-        min: 1,
-        max: 1,
-        propagateCreateError: false
+        min: 2,
+        max: 10,
+        propagateCreateError: false,
+        idleTimeoutMillis: 30000,
+        acquireTimeoutMillis: 60000,
     }
 };
