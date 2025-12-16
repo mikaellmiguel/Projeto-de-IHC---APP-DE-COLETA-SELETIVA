@@ -52,7 +52,7 @@ export default function ImpactPage({ currentGroup }: ImpactPageProps) {
   // Fonte para os calculos de impacto ambiental: https://www.4menearme.com/tools/recycling-calculator , https://lessismore.org/materials/28-why-recycle
   // Fonte para os calculos de CO2 evitado: https://www.epa.gov/energy/greenhouse-gas-equivalencies-calculator
 
-  const WEIGHT_PER_BAG = 2 // kg de material reciclado por saco
+  const WEIGHT_PER_BAG = 0.5 // kg de material reciclado por saco
   const PLASTIC_PER_KG = 0.52
   const PAPER_PER_KG = 0.32
   const METAL_PER_KG = 0.07

@@ -61,7 +61,7 @@ export default function ProfilePage({ userName, currentGroup, onLogout, handleBa
 
   const userBagsRecycled = records.reduce((sum, r) => sum + Number(r.bags), 0)
 
-  const WEIGHT_PER_BAG = 2 // kg de material reciclado por saco
+  const WEIGHT_PER_BAG = 0.5 // kg de material reciclado por saco
   const PLASTIC_PER_KG = 0.52
   const PAPER_PER_KG = 0.32
   const METAL_PER_KG = 0.07

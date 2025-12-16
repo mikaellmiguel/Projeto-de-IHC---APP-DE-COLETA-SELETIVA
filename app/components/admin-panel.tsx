@@ -219,7 +219,7 @@ export default function AdminPanel({ currentGroup }: AdminPanelProps) {
                             </div>
                         </div>
                         <div>
-                            <Label htmlFor="bags">Quantidade de sacos (≈ 2kg cada)</Label>
+                            <Label htmlFor="bags">Quantidade de sacos (≈500g cada)</Label>
                             <Input
                                 id="bags"
                                 type="number"

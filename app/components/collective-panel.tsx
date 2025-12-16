@@ -276,7 +276,7 @@ export default function CollectivePanel({ currentGroup, userId }: ProfilePagePro
 
             {/* Input de sacos */}
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Quantos sacos <strong>(≈ 2kg cada)</strong> você reciclou?</label>
+              <label className="text-sm font-medium text-foreground">Quantos sacos (≈500g cada) você reciclou?</label>
               <Input
                 type="number"
                 placeholder="0"
